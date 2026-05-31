@@ -1,0 +1,163 @@
+================================================================================
+  CALIBRATION GUIDE
+================================================================================
+
+There are TWO separate calibrations in this system:
+
+  A) Hand-Eye Calibration  (01 -> 02 -> 03)
+     Finds the transform: tool0 -> d435i_link
+     (where is the camera relative to the robot wrist)
+
+  B) Bench Calibration     (calibrate_bench.py)
+     Measures the exact Z-height of the workbench surface
+     so the reconstruction crops correctly
+
+--------------------------------------------------------------------------------
+  WHICH ONE DO YOU NEED?
+--------------------------------------------------------------------------------
+
+  - Camera physically moved or remounted  ->  Redo Hand-Eye (Steps A2-A4)
+  - Robot base or bench moved             ->  Redo Bench Calibration (Part B)
+  - Starting a new scan in the same setup ->  Neither, you are done
+
+The current hand-eye result (calib_result.yaml) was collected from 21 samples
+and is already good. Do NOT redo it unless something physically changed.
+
+================================================================================
+  PART A — HAND-EYE CALIBRATION (camera-to-robot wrist)
+================================================================================
+
+--------------------------------------------------------------------------------
+  STEP A1 — Generate the board  (SKIP — already done)
+--------------------------------------------------------------------------------
+
+The board PNG already exists at: calibration/charuco_board.png
+
+Only run this if the file is missing or board parameters changed:
+
+    cd /home/jayden/ros2_ws/src/rs2
+    python3 calibration/01_generate_board.py
+
+PRINTING INSTRUCTIONS:
+  - Print at 100% scale — use "Actual Size", NOT "Fit to Page"
+  - A4 portrait orientation
+  - Verify with a ruler: each square must measure exactly 40 mm
+  - Mount FLAT and RIGID on a clipboard or 3 mm foamboard
+  - A warped board will degrade calibration accuracy
+
+--------------------------------------------------------------------------------
+  STEP A2 — Collect samples
+--------------------------------------------------------------------------------
+
+PREREQUISITES (must be running before starting — NOT the full system):
+  - UR robot driver   (provides base_link -> tool0 TF)
+  - RealSense driver  (provides /camera/d435i/color/image_raw and
+                       d435i_link -> d435i_color_optical_frame TF)
+
+Run:
+    cd /home/jayden/ros2_ws/src/rs2
+    source /opt/ros/humble/setup.bash && source install/setup.bash
+    python3 calibration/02_collect_samples.py
+
+An OpenCV window opens showing the live camera feed with detection overlay.
+
+COLLECTION PROCEDURE:
+  1. Hold the ChArUco board where the camera can see it (30-70 cm away)
+  2. Enable FREEDRIVE on the teach pendant
+  3. Move the robot to a pose where the board is clearly visible
+  4. Disable FREEDRIVE (robot locks in position)
+  5. Wait for overlay to show: "Board DETECTED  [GOOD]" with green corners
+  6. Press SPACE to capture the sample
+  7. Repeat steps 2-6 for at least 20 samples
+
+POSE DIVERSITY IS CRITICAL — poor diversity = bad calibration:
+  - Vary wrist_1, wrist_2, wrist_3 significantly between every sample
+  - Include at least 3 clearly different camera tilt angles
+    (e.g. 0 deg, ~30 deg, ~60 deg from straight-on view of the board)
+  - Move camera to different pan positions (board left / centre / right)
+  - Do NOT rotate about only a single axis — coplanar poses fail
+
+CONTROLS while the window is open:
+  SPACE  =  capture current pose (only works if board is detected)
+  D      =  discard the most recent sample
+  Q      =  save all samples and quit
+
+Output saved to: calibration/calib_samples.json
+
+--------------------------------------------------------------------------------
+  STEP A3 — Solve the calibration
+--------------------------------------------------------------------------------
+
+    cd /home/jayden/ros2_ws/src/rs2
+    python3 calibration/03_solve_calibration.py
+
+Runs all 5 OpenCV hand-eye methods and prints a consensus result.
+
+CHECK THE OUTPUT:
+  - Translation spread < 5 mm   ->  excellent
+  - Translation spread < 15 mm  ->  acceptable
+  - Translation spread > 15 mm  ->  pose diversity was too low, redo Step A2
+  - Outliers printed             ->  need more diverse samples, redo Step A2
+  - Sanity check angle ~90 deg  ->  correct (camera is radially mounted)
+
+Output saved to: calibration/calib_result.yaml
+
+--------------------------------------------------------------------------------
+  STEP A4 — Update the launch file
+--------------------------------------------------------------------------------
+
+The solver prints the exact arguments to paste. Copy the x, y, z, qx, qy, qz,
+qw values into launch/master.launch.py at the handeye_tf node (~line 153),
+replacing the existing --x, --y, --z, --qx, --qy, --qz, --qw values.
+
+================================================================================
+  PART B — BENCH CALIBRATION (workbench surface height)
+================================================================================
+
+PREREQUISITES:
+  - Full system running (master.launch.py)
+  - Robot at pre-scan position
+
+PROCEDURE:
+
+  1. Make sure the bench is COMPLETELY EMPTY (no object on it)
+
+  2. In the GUI, set the scan name to:  empty_bench
+
+  3. Start a full auto-scan and let it complete all 15 waypoints
+
+  4. Once the scan is finished, run:
+
+         cd /home/jayden/ros2_ws/src/rs2
+         python3 calibration/calibrate_bench.py --session raw_scans/empty_bench
+
+     The script reconstructs the point cloud, fits a plane to the bench
+     surface using RANSAC, and writes the Z height to config/workspace.yaml
+     automatically.
+
+CHECK THE OUTPUT:
+  - Tilt < 5 deg        ->  good (warns if higher — bench or base not level)
+  - Inlier fraction > 30%  ->  good (warns if lower — XY crop may be wrong)
+
+The effective z_min used during reconstruction is:
+    bench.z_m + bench.margin_m  (currently 0.000183 + 0.015 = 0.0152 m)
+
+The margin keeps the bench surface itself from appearing in the scan output.
+workspace.yaml is updated automatically — no manual editing required.
+
+================================================================================
+  CURRENT CALIBRATION VALUES
+================================================================================
+
+Hand-eye (calib_result.yaml):
+  translation:  x=-0.02259  y=0.01038  z=0.05115
+  rotation:     qx=0.51064  qy=-0.49353  qz=0.49361  qw=0.50201
+  frame:        tool0 -> d435i_link
+  samples used: 21  (methods: TSAI, PARK, HORAUD)
+
+Bench (config/workspace.yaml):
+  bench.z_m:    0.000183 m  (calibrated 2026-05-19)
+  margin_m:     0.015 m
+  z_min (eff):  0.0152 m
+
+================================================================================

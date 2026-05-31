@@ -1,0 +1,23 @@
+# AUTO-GENERATED SECTION — do not edit bench.z_m or bench.calibration_* manually
+# USER-EDITABLE SECTION — set bounding_box values to surround your object area
+bench:
+  z_m: 0.000183
+  margin_m: 0.015
+  calibration_session: empty_bench
+  calibration_timestamp: 2026-05-19T15:32:05
+bounding_box:
+  x_min: -0.25
+  x_max:  0.25
+  y_min:  0.15
+  y_max:  0.45
+  z_max:  0.3
+# z_min is NEVER stored. Computed at runtime as: bench.z_m + bench.margin_m
+
+# Sample collection / drop-off zone (all values in metres, base_link frame).
+# Measure the physical location of the drop-off container relative to the robot
+# base and set x/y/z here. The centroid of each scanned object is printed
+# alongside these coordinates after every reconstruction.
+drop_off_zone:
+  x: 0.3   # TODO: measure and set this
+  y: 0.3   # TODO: measure and set this
+  z: 0.0   # TODO: measure and set this

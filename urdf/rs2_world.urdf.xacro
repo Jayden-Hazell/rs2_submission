@@ -1,0 +1,148 @@
+<?xml version="1.0"?>
+<robot xmlns:xacro="http://wiki.ros.org/xacro" name="ur">
+
+  <xacro:include filename="$(find ur_description)/urdf/ur_macro.xacro"/>
+
+  <!-- UR driver required args -->
+  <xacro:arg name="ur_type" default="ur3e"/>
+  <xacro:arg name="name" default="ur"/>
+  <xacro:arg name="tf_prefix" default=""/>
+  <xacro:arg name="robot_ip" default="xxx.yyy.zzz.www"/>
+  <xacro:arg name="use_fake_hardware" default="true"/>
+  <xacro:arg name="fake_sensor_commands" default="true"/>
+  <xacro:arg name="headless_mode" default="false"/>
+
+  <xacro:arg name="script_filename" default="to_be_filled_by_ur_robot_driver"/>
+  <xacro:arg name="input_recipe_filename" default="to_be_filled_by_ur_robot_driver"/>
+  <xacro:arg name="output_recipe_filename" default="to_be_filled_by_ur_robot_driver"/>
+
+  <xacro:arg name="joint_limit_params" default="$(find ur_description)/config/$(arg ur_type)/joint_limits.yaml"/>
+  <xacro:arg name="kinematics_params" default="$(find ur_description)/config/$(arg ur_type)/default_kinematics.yaml"/>
+  <xacro:arg name="physical_params" default="$(find ur_description)/config/$(arg ur_type)/physical_parameters.yaml"/>
+  <xacro:arg name="visual_params" default="$(find ur_description)/config/$(arg ur_type)/visual_parameters.yaml"/>
+
+  <link name="world"/>
+
+  <link name="workbench">
+    <visual>
+      <geometry>
+        <mesh filename="package://rs2/models/workbench/meshes/UR3eTrolley_decimated.dae"/>
+      </geometry>
+    </visual>
+    <collision>
+      <geometry>
+        <mesh filename="package://rs2/models/workbench/meshes/UR3eTrolley_decimated.dae"/>
+      </geometry>
+    </collision>
+  </link>
+
+  <joint name="world_to_workbench" type="fixed">
+    <parent link="world"/>
+    <child link="workbench"/>
+    <origin xyz="0 0.2 -1.05" rpy="0 0 -3.14159"/>
+  </joint>
+
+  <xacro:ur_robot
+    name="$(arg name)"
+    tf_prefix="$(arg tf_prefix)"
+    parent="workbench"
+    joint_limits_parameters_file="$(find ur_description)/config/$(arg ur_type)/joint_limits.yaml"
+    kinematics_parameters_file="$(arg kinematics_params)"
+    physical_parameters_file="$(find ur_description)/config/$(arg ur_type)/physical_parameters.yaml"
+    visual_parameters_file="$(find ur_description)/config/$(arg ur_type)/visual_parameters.yaml"
+    robot_ip="$(arg robot_ip)"
+    script_filename="$(arg script_filename)"
+    input_recipe_filename="$(arg input_recipe_filename)"
+    output_recipe_filename="$(arg output_recipe_filename)"
+    use_fake_hardware="$(arg use_fake_hardware)"
+    fake_sensor_commands="$(arg fake_sensor_commands)"
+    headless_mode="$(arg headless_mode)"
+    sim_gazebo="false">
+    <origin xyz="0 0.2 1.05" rpy="0 0 3.14159"/>
+  </xacro:ur_robot>
+
+  <link name="virtual_floor">
+    <!-- <visual>
+      <origin xyz="0 0 0.015" rpy="0 0 0"/>
+      <geometry>
+        <box size="4.0 4.0 0.03"/>
+      </geometry>
+      <material name="transparent_red">
+        <color rgba="1.0 0.0 0.0 0.25"/>
+      </material>
+    </visual> -->
+    <collision>
+      <origin xyz="0 0 0.015" rpy="0 0 0"/>
+      <geometry>
+        <box size="4.0 4.0 0.03"/>
+      </geometry>
+    </collision>
+  </link>
+
+  <joint name="base_link_to_virtual_floor" type="fixed">
+    <parent link="base_link"/>
+    <child link="virtual_floor"/>
+    <origin xyz="0 0 0" rpy="0 0 0"/>
+  </joint>
+
+  <link name="d435_mount_assembly">
+    <visual>
+      <origin xyz="-0.045 -0.03 0" rpy="0 0 0"/>
+      <geometry>
+        <mesh
+          filename="package://rs2/models/camera_mount/D435 Mount assembly Rev D.STL"
+          scale="0.001 0.001 0.001"/>
+      </geometry>
+      <material name="camera_mount_grey">
+        <color rgba="0.18 0.18 0.18 1.0"/>
+      </material>
+    </visual>
+  </link>
+
+  <joint name="tool0_to_d435_mount_assembly" type="fixed">
+    <parent link="tool0"/>
+    <child link="d435_mount_assembly"/>
+    <origin xyz="0 0 0" rpy="0 0 0"/>
+  </joint>
+
+  <link name="camera_link"/>
+
+  <joint name="d435_mount_assembly_to_camera_link" type="fixed">
+    <parent link="d435_mount_assembly"/>
+    <child link="camera_link"/>
+    <origin xyz="0 0 0" rpy="0 0 0"/>
+  </joint>
+
+  <link name="camera_depth_optical_frame"/>
+
+  <joint name="camera_link_to_depth_optical_frame" type="fixed">
+    <parent link="camera_link"/>
+    <child link="camera_depth_optical_frame"/>
+    <origin xyz="0 0 0" rpy="-1.5708 0 -1.5708"/>
+  </joint>
+
+  <link name="tool0_collision_box">
+    <visual>
+      <origin xyz="0 0 0.05" rpy="0 0 0"/>
+      <geometry>
+        <box size="0.15 0.10 0.20"/>
+      </geometry>
+      <material name="transparent_green">
+        <color rgba="0.0 1.0 0.0 0.35"/>
+      </material>
+    </visual>
+    <collision>
+      <origin xyz="0 0 0.05" rpy="0 0 0"/>
+      <geometry>
+        <box size="0.15 0.10 0.20"/>
+      </geometry>
+    </collision>
+  </link>
+
+  <joint name="tool0_to_collision_box" type="fixed">
+    <parent link="tool0"/>
+    <child link="tool0_collision_box"/>
+    <origin xyz="0 0 0" rpy="0 0 0"/>
+  </joint>
+
+</robot>

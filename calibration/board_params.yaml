@@ -1,0 +1,5 @@
+aruco_dict_id: 1
+marker_length_m: 0.03
+square_length_m: 0.04
+squares_x: 5
+squares_y: 7

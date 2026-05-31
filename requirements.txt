@@ -1,0 +1,28 @@
+# Python dependencies for ARISS (rs2 package)
+# Install with: pip install -r requirements.txt
+#
+# Note: ROS 2 packages (rclpy, cv_bridge, tf2_ros, sensor_msgs, etc.) are
+# installed via apt/rosdep and are NOT listed here.
+
+# --- GUI framework ---
+PySide6           # Qt6 Python bindings — main GUI (gui_node.py)
+pyqtgraph         # OpenGL-accelerated plots — digital twin and point cloud viewer (gui_node.py)
+PyOpenGL          # OpenGL backend required by pyqtgraph.opengl
+python-xlib       # X11 Python bindings — display detection in gui_node.py
+
+# --- Computer vision ---
+opencv-python     # Image processing — scan_node.py and reconstruct.py (imported as cv2)
+
+# --- Numerics / science ---
+numpy>=1.21       # Core array operations — used across all nodes
+scipy>=1.8        # Scientific computing — used by Open3D and trimesh internals
+
+# --- 3D processing ---
+open3d            # Point cloud merging, ICP, normal estimation, meshing — reconstruct.py and mesh_from_cloud.py
+trimesh           # Mesh loading and rendering in the GUI Model tab
+pycollada         # Collada (.dae) format support for trimesh
+pymeshlab         # Mesh processing pipeline invoked by mesh_from_cloud.py
+shapely           # 2D geometry used internally by trimesh
+
+# --- Configuration / serialisation ---
+PyYAML            # YAML parsing — scan_node.py (camera_info.yaml) and reconstruct.py (workspace.yaml)

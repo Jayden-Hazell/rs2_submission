@@ -1,0 +1,45 @@
+# ============================
+# ARISS / RS2 — Git Ignore
+# ============================
+
+# --- ROS 2 build, install, and log directories ---
+build/
+install/
+log/
+.colcon_install_layout
+
+# --- Python cache ---
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+
+# --- Python virtual environments ---
+.venv/
+venv/
+env/
+ENV/
+
+# --- Scan data ---
+# Track the folder itself (via .gitkeep) but ignore all scan contents
+/raw_scans/*
+!raw_scans/.gitkeep
+/reconstructed_scans/*
+!reconstructed_scans/.gitkeep
+
+# --- Legacy / archived scan directories ---
+/old_scans/
+/Old_Scans/
+/Original_Test/
+/scans/
+
+# --- IDE ---
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# --- macOS / OS artefacts ---
+.DS_Store
+Thumbs.db

@@ -1,0 +1,16 @@
+translation:
+  x: -0.01806223017679927
+  y: 0.028152298738787607
+  z: 0.05015581140154543
+rotation_xyzw:
+  x: 0.49726773523464957
+  y: -0.4892979954510073
+  z: 0.5261236243812866
+  w: 0.48631903418448225
+frame_id: tool0
+child_frame_id: d435i_link
+n_samples: 22
+methods_used:
+- TSAI
+- PARK
+- HORAUD

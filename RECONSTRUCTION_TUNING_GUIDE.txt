@@ -1,0 +1,293 @@
+================================================================================
+  RECONSTRUCTION TUNING GUIDE
+================================================================================
+
+All tunable values live at the TOP of each file under "TUNABLE CONSTANTS".
+You do NOT need to hunt through the code to change them.
+
+  helpers/reconstruct.py      — point cloud parameters (SOR, ROR, normals)
+  helpers/mesh_from_cloud.py  — mesh parameters (Poisson depth, smoothing)
+
+================================================================================
+  PARAMETER REFERENCE TABLE
+================================================================================
+
+--- helpers/reconstruct.py ---------------------------------------------------
+
+  PARAMETER            DEFAULT   WHAT IT DOES
+  ─────────────────────────────────────────────────────────────────────────────
+
+  SOR_NB_NEIGHBORS       20      Per-capture noise filter. For every point,
+                                 compute the mean distance to this many nearest
+                                 neighbours. Points that are too far away compared
+                                 to the global average are removed.
+                                 Lower = more sensitive, removes more points.
+                                 Higher = less sensitive, keeps more points.
+
+  SOR_STD_RATIO           2.0    The threshold multiplier for SOR.
+                                 A point is removed if its mean neighbour distance
+                                 exceeds: (global mean) + (STD_RATIO × std dev).
+                                 Lower = removes more aggressively.
+                                 Higher = only removes extreme outliers.
+
+  ROR_NB_POINTS            5     Global noise filter after merging. A point is
+                                 KEPT only if it has at least this many neighbours
+                                 within ROR_RADIUS_M. Points with fewer neighbours
+                                 are floating isolated noise.
+                                 Raise to kill larger floating clusters.
+
+  ROR_RADIUS_M           0.015   Sphere radius (metres) used for the ROR neighbour
+                                 count. Think of it as: "within a 15 mm ball around
+                                 each point, there must be at least ROR_NB_POINTS".
+                                 Lower = stricter, removes more.
+                                 Higher = looser, keeps more.
+
+  NORMAL_RADIUS_M        0.03    KDTree search radius for normal estimation.
+                                 Should be roughly 2-3x the voxel size (default
+                                 voxel = 5 mm, so 10-15 mm is appropriate).
+                                 Too small = noisy/flipping normals.
+                                 Too large = over-smoothed normals, loses detail.
+
+  NORMAL_MAX_NN            30    Max number of neighbours included in each normal
+                                 calculation. Raise for sparse clouds to get more
+                                 stable normals. Rarely needs changing.
+
+  NORMAL_ORIENT_K          15    Neighbours used to propagate consistent normal
+                                 orientation across the cloud (inside vs outside).
+                                 Raise if you see black/inverted patches in the
+                                 Poisson mesh — it means normals are flipping.
+
+  --voxel-size (CLI)    0.005 m  Voxel grid resolution after merging all captures.
+                                 Every 5mm cube of space is reduced to one point.
+                                 Lower = finer detail (0.003 m), slower, larger file.
+                                 Higher = coarser (0.008 m), faster, smaller file.
+
+  --depth-trunc (CLI)    2.0 m   Depth pixels beyond this distance are zeroed out
+                                 before back-projection. Cuts out background objects.
+                                 Lower to 1.0-1.5 m if background appears in cloud.
+
+--- helpers/mesh_from_cloud.py -----------------------------------------------
+
+  PARAMETER                  DEFAULT   WHAT IT DOES
+  ─────────────────────────────────────────────────────────────────────────────
+
+  POISSON_DEPTH                  9     Octree depth for Poisson surface reconstruction.
+                                       Controls the level of detail in the output mesh.
+                                       8  = fast, blocky, fewer triangles.
+                                       9  = balanced (default).
+                                       10 = high detail, slower, larger file.
+                                       11 = very high detail, very slow.
+
+  POISSON_DENSITY_THRESHOLD     0.2    After Poisson runs, every vertex gets a density
+                                       score based on how many point cloud points
+                                       supported it. The bottom X% of vertices are
+                                       removed — these are where Poisson invented
+                                       geometry with little real data (usually the
+                                       fringe around the base of the object).
+                                       Raise (0.3+) = cuts more fringe/invented skirt.
+                                       Lower (0.05) = keeps more, may keep bad geometry.
+
+  SMOOTH_PASSES                 20     Taubin smoothing iterations. Unlike Laplacian
+                                       smoothing, Taubin does NOT shrink or distort the
+                                       mesh — it only reduces high-frequency noise.
+                                       0  = no smoothing (raw Poisson output).
+                                       5  = light smoothing.
+                                       20 = strong smoothing (default).
+                                       40 = very strong, may soften real sharp edges.
+
+  HOLE_MAX_BOUNDARY_EDGES     1000     Maximum hole size (in boundary edge count) that
+                                       will be auto-filled. The flat bottom cap hole
+                                       is always large — keep this high. Lower it only
+                                       if you want intentional large openings preserved.
+
+================================================================================
+  BOUNDING BOX VISUALISATION (tune before scanning)
+================================================================================
+
+Use this to see the current bounding box overlaid on a point cloud WITHOUT
+cropping anything, so you can visually verify the box covers your object.
+
+  cd /home/jayden/ros2_ws/src/rs2
+
+  python3 helpers/reconstruct.py \
+      --session raw_scans/<session_name> \
+      --debug-bbox
+
+This opens an Open3D viewer showing the full uncropped cloud with the
+workspace bounding box as a RED WIREFRAME.
+  - Points OUTSIDE the red box are removed in a normal scan run.
+  - Points INSIDE the red box are kept.
+
+A red PLY file is also saved at: raw_scans/<session_name>/debug_bbox.ply
+Open it in MeshLab if the Open3D viewer fails on Wayland:
+
+  meshlab raw_scans/<session_name>/debug_bbox.ply
+
+To adjust the box, edit config/workspace.yaml:
+
+  bounding_box:
+    x_min: -0.25    ← left/right (robot's left is negative)
+    x_max:  0.25    ← left/right
+    y_min:  0.15    ← near/far from robot (0.15 = 15 cm away)
+    y_max:  0.45    ← near/far from robot
+    z_max:  0.3     ← max object height above bench (30 cm)
+
+After editing, re-run --debug-bbox to confirm the box looks right before
+doing a full scan run.
+
+================================================================================
+  TEST PLAN — SCAN, RECONSTRUCT, VIEW, TUNE
+================================================================================
+
+------------------------------------------------------------------------
+STEP 1 — Physical scan
+------------------------------------------------------------------------
+
+1. Launch the full system:
+       ros2 launch rs2 master.launch.py
+
+2. In the GUI:
+   a. Type a name in the "File Name" field  (e.g. Black_Box)
+   b. Click "Move to Pre-Scan Position"
+   c. Wait for robot to reach position
+   d. Click "Start Scan"
+   e. Wait for all 15 waypoints to complete
+   f. The system automatically runs reconstruct.py + mesh_from_cloud.py
+      The scan_node status will show RECONSTRUCTING until both finish.
+      This takes 2-5 minutes depending on object complexity.
+
+3. Outputs when complete:
+       raw_scans/Black_Box/              ← raw captures (never deleted)
+       reconstructed_scans/Black_Box/
+           reconstruction.ply            ← point cloud
+           Black_Box.ply                 ← final mesh (open this in MeshLab)
+           reconstruction.json           ← provenance / stats
+
+------------------------------------------------------------------------
+STEP 2 — View the mesh in MeshLab
+------------------------------------------------------------------------
+
+   meshlab reconstructed_scans/Black_Box/Black_Box.ply
+
+MeshLab controls:
+   Left drag       = rotate
+   Right drag      = pan
+   Scroll          = zoom
+   Double-click    = set rotation centre to that point
+
+Recommended view settings in MeshLab:
+   View > Render > Lighting > Two-Sided Lighting  (shows inside faces too)
+   View > Render > Color > Vertex Color           (shows scan colour)
+
+------------------------------------------------------------------------
+STEP 3 — Diagnose what you see
+------------------------------------------------------------------------
+
+  SYMPTOM                         CAUSE                    WHAT TO CHANGE
+  ──────────────────────────────────────────────────────────────────────
+
+  Rough/bumpy surface overall     Smoothing too low         Raise SMOOTH_PASSES
+                                                            in mesh_from_cloud.py
+                                                            (try 30-40)
+
+  Floating blobs or ghost         ROR too loose             Raise ROR_NB_POINTS
+  geometry near the object                                  in reconstruct.py
+                                                            (try 8-12)
+
+  Ragged fringe/skirt around      Density threshold         Raise
+  the base of the object          too low                   POISSON_DENSITY_THRESHOLD
+                                                            in mesh_from_cloud.py
+                                                            (try 0.3)
+
+  Surface looks blocky/faceted    Poisson depth too low     Raise POISSON_DEPTH
+                                                            in mesh_from_cloud.py
+                                                            (try 10)
+
+  Too much detail = slow + noisy  Poisson depth too high    Lower POISSON_DEPTH
+                                                            (try 8)
+
+  Missing patches / holes in      Cloud too sparse          Lower --voxel-size
+  the side of the object          (over-downsampled)        from 0.005 to 0.003
+                                                            in scan_node.py cmd
+
+  Object extends below bench      z_min too low             Raise margin_m in
+  or bench surface visible                                  config/workspace.yaml
+                                                            (try 0.020-0.025)
+
+  Top of object clipped flat      z_max too low             Raise z_max in
+                                                            config/workspace.yaml
+
+  Object cut off at the sides     Bounding box too tight    Widen x_min/x_max or
+                                                            y_min/y_max in
+                                                            config/workspace.yaml
+
+  Background objects in cloud     depth_trunc too high      Lower --depth-trunc
+  (wall, bench edge etc.)                                   in scan_node.py cmd
+                                                            (try 1.2-1.5)
+
+  Doubled/ghost edges on flat     Capture misalignment      Add --icp to cmd
+  surfaces (e.g. top of box)      (poor TF or slight        in scan_node.py
+                                  camera drift)
+
+  Noisy wavy flat surfaces        SOR too loose             Lower SOR_STD_RATIO
+                                                            from 2.0 to 1.5
+
+  Real sharp edges being          Smoothing too high        Lower SMOOTH_PASSES
+  rounded off (corner of box)                               (try 10-15)
+
+  Very long reconstruction time   Too many points           Raise --voxel-size
+                                                            from 0.005 to 0.007
+
+------------------------------------------------------------------------
+STEP 4 — Re-run without rescanning
+------------------------------------------------------------------------
+
+You do NOT need a physical rescan to change reconstruction parameters.
+The raw captures are already saved in raw_scans/<session>/.
+
+RE-RUN FULL PIPELINE (point cloud + mesh):
+
+   cd /home/jayden/ros2_ws/src/rs2
+
+   python3 helpers/reconstruct.py \
+       --session raw_scans/Black_Box \
+       --no-visualise \
+       --mesh
+
+RE-RUN MESH ONLY (fastest — use this when only changing mesh params):
+
+   python3 helpers/mesh_from_cloud.py \
+       --cloud reconstructed_scans/Black_Box/reconstruction.ply \
+       --no-visualise
+
+Then view in MeshLab again:
+
+   meshlab reconstructed_scans/Black_Box/Black_Box.ply
+
+Repeat steps 3-4 until happy. When the result looks good, the parameter
+values you set in the TUNABLE CONSTANTS sections become your new defaults
+and will apply to all future scans automatically.
+
+------------------------------------------------------------------------
+STEP 5 — Lock in the best values
+------------------------------------------------------------------------
+
+Once you are happy with the result:
+   1. The values already in the TUNABLE CONSTANTS sections are your new
+      defaults — no further action needed.
+   2. Commit the changes to git so they are not lost:
+          git add helpers/reconstruct.py helpers/mesh_from_cloud.py
+          git commit -m "Tune reconstruction parameters after bench testing"
+
+================================================================================
+  QUICK REFERENCE — FILE LOCATIONS
+================================================================================
+
+  helpers/reconstruct.py           Point cloud pipeline + TUNABLE CONSTANTS
+  helpers/mesh_from_cloud.py       Mesh pipeline + TUNABLE CONSTANTS
+  config/workspace.yaml            Bounding box + bench height (z_min)
+  scripts/scan_node.py  line ~949  reconstruct.py launch command (--depth-trunc etc)
+  raw_scans/<name>/                Raw captured frames (never deleted, always re-usable)
+  reconstructed_scans/<name>/      Output point cloud and mesh files
+
+================================================================================
